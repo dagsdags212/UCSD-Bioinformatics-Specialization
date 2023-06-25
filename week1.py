@@ -1,6 +1,6 @@
-from pydantic.dataclasses import dataclass
-from pydantic import BaseModel
-
+from itertools import product
+from dbg import DeBruijinGraph
+from random import shuffle
 
 def kmer_composition(text: str, k: int) -> list[str]:
     """Generate the k-mer composition of a string text."""
@@ -129,69 +129,18 @@ class OverlapGraph:
                     edge_list.append(edge)
         return edge_list
 
-class DBG:
-    def __init__(self, seq: str, k: int) -> None:
-        self.seq = seq
+def find_k_universal_string(k: int) -> str:
+    ls = ([''.join(l) for l in product('01', repeat=k)])
+    print(ls)
+    shuffle(ls)
+    dbg = DeBruijinGraph(ls, k)
+    path = list(dbg.eulerian_path())
 
-        if isinstance(seq, str):
-            self.k = k
-            self.nodes: list[str] = self._construct_node_list()
-            self.edges: list[str] = self._construct_edge_list()
-            self.graph: dict = self._construct_graph()
-        if isinstance(seq, list):
-            self.k = len(seq[0])
-            nodes = set([edge[:-1] for edge in seq] + [edge[1:] for edge in seq])
-            self.nodes = sorted(list(map(Node, nodes)))
-            self.edges = seq
+    kstring = path[0]
+    for i in range(1, len(path)-(k-2)):
+        kstring += path[i][-1]
+    return kstring
 
-        self.graph: dict = self._construct_graph()
-
-
-    def __str__(self) -> str:
-        """Format graph."""
-        f = ''
-        for k, v in self.graph.items():
-            f += f"{k} :  {' '.join([node.seq for node in v])}\n"
-        return f
-
-    def _construct_node_list(self) -> list[str]:
-        """Generate a unique (k-1)-mers of sequence to represent the glued nodes in graph."""
-        nodes = []
-        for i in range(len(self.seq)-self.k+2):
-            node = Node(self.seq[i:i+self.k-1]) ##
-            if node not in nodes:
-                nodes.append(node)
-        return sorted(nodes)
-
-    def _construct_edge_list(self) -> list[str]:
-        """Generate edges."""
-        edges = []
-        for i in range(len(self.seq)-self.k+1):
-            edges.append(self.seq[i:i+self.k])
-        return edges
-
-    def _construct_graph(self) -> list[str]:
-        """Construct a DeBruijin graph."""
-        graph = {node: [] for node in self.nodes}
-        for edge in self.edges:
-            for node in self.nodes:
-                if Node(edge[1:]) == node:
-                    graph[Node(edge[:-1])].append(node)
-        for k in graph.copy():
-            if graph[k] == []:
-                del graph[k]
-        return graph
-
-    def is_eulerian(self) -> bool:
-        for node in self.nodes:
-            if not node.is_balanced():
-                return False
-        return True
-
-    def composition(self, k):
-        pass
-
-    def find_path(self):
-        pass
-
-
+res = find_k_universal_string(4)
+print(res)
+print(len(res))
