@@ -1,5 +1,6 @@
 import itertools
 import random
+from pathlib import Path
 from typing import TypedDict, List, Optional
 
 # ===== Eulerian Path Problem ===== #
@@ -16,7 +17,7 @@ class Node:
     def __hash__(self) -> int:
         count = 0
         for i, char in enumerate(str(self._value)):
-            count += ord(char) * (i+1)
+            count += ord(char) * (i+5) ** 2
         return hash(count)
 
     def __str__(self) -> str:
@@ -88,11 +89,26 @@ class Edge:
         dest.edges += [self]
         self._dest = dest
 
+    def __hash__(self) -> int:
+        count = 0
+        for i in self.src:
+            count += ord(i)
+        for j in self.dest:
+            count += ord(j)
+        return hash(count)
+
     def __repr__(self):
         return f"{self.src}->{self.dest}"
 
     def __str__(self):
         return f"{self.src}->{self.dest}"
+
+    def __del__(self):
+        self.src.outgoing -= 1
+        self.dest.incoming -= 1
+
+    def __eq__(self, other) -> bool:
+        return hash(self) == hash(other)
 
     @property
     def src(self) -> Node:
@@ -113,6 +129,7 @@ class DirectedGraph:
         self.edges = self._generate_edges()
         self.g = self._generate_graph()
         self._balance_nodes()
+
 
     def _generate_nodes(self) -> list[Node]:
         parents = set(self.adj_list.keys())
@@ -193,48 +210,74 @@ class DeBruijin:
         self.kmers = kmers
         self.k = k
         self.nodes = [Node(kmer) for kmer in kmers]
-        self.g = self._generate_graph()
         self.edges = self._generate_edges()
-        self.genome = None
+        self.g = self._generate_graph()
+        self._balance_nodes()
+        self.path = self.find_path()
+        self.genome = self.construct_genome()
 
-    def _generate_graph(self) -> dict:
-        graph = {node: [] for node in self.nodes}
-        for parent in graph.keys():
-            for child in self.nodes:
-                if parent == child:
-                    continue
-                if parent.suffix == child.prefix:
-                    graph[parent] += [child]
-        return graph
+    def __repr__(self) -> str:
+        f = ""
+        for key, value in self.g.items():
+            line = ""
+            line += f"{key}: "
+            for v in value:
+                line += f"{v} "
+            f += line + "\n"
+        return f
+
 
     def _generate_edges(self) -> list[Edge]:
         edges = []
-        for parent, children in self.g.items():
-            for child in children:
-                edges.append(Edge(parent, child))
+        for n1 in self.nodes:
+            for n2 in self.nodes:
+                if n1 == n2: continue
+                if n1.suffix == n2.prefix:
+                    e = Edge(n1, n2)
+                    if e not in edges:
+                        edges.append(e)
+                    else:
+                        del e
         return edges
 
+    def _generate_graph(self) -> dict:
+        graph = {}
+        for edge in self.edges:
+            if edge.src not in graph:
+                graph[edge.src] = [edge.dest]
+            else:
+                graph[edge.src].append(edge.dest)
+        return graph
+
+    def _balance_nodes(self) -> None:
+        values = [i for sl in self.g.values() for i in sl]
+
+        for key in self.g.keys():
+            key.outgoing = len(self.g[key])
+            key.incoming = values.count(key)
+
+        for values in self.g.values():
+            for value in values:
+                value.outgoing = len(self.g[value]) if value in self.g else 0
+                value.incoming = values.count(value)
+
     def find_starting_node(self) -> Node | None:
-        for node in self.nodes:
+        for node in self.g.keys():
             if node.incoming < node.outgoing:
                 return node
 
     def find_ending_node(self) -> Node | None:
-        for node in self.nodes:
-            if node.incoming > node.outgoing:
-                return node
+        for nodes in self.g.values():
+            for node in nodes:
+                if node.incoming > node.outgoing:
+                    return node
 
     def find_path(self, display: bool = False) -> list[Node]:
-        # check if the graph has a Eulerian path
-        if not self.has_eulerian_path():
-            print('A Eulerian path does not exist!')
-            return False
-
         # initialize stack with the starting node, and path with the ending node
         start = self.find_starting_node()
         end = self.find_ending_node()
-        path = [end]
         stack = [start]
+        path = [end]
         graph = self.g.copy()
 
         while stack:
@@ -249,13 +292,15 @@ class DeBruijin:
         # display eulerian path
         if display:
             print('->'.join([str(p.value) for p in path]))
+        self.path = path
         return path
 
-    def construct_genome(self):
-        if not self.has_eulerian_path():
-            return None
-        return self.find_path()
-
+    def construct_genome(self) -> str | None:
+        if self.path:
+            genome = self.path[0].value
+            for node in self.path[1:]:
+                genome += node[-1]
+            return genome
 
     def has_eulerian_path(self) -> bool:
         unbalanced_count = 0
@@ -273,10 +318,19 @@ class DeBruijin:
         return True
 
 
-kmers = ['CTTA', 'ACCA', 'TACC', 'GGCT', 'GCTT', 'TTAC']
-k = 4
+num = 8
+filename = f"input_{num}.txt"
+directory = 'datasets/string_reconstruction'
+PATH = Path.cwd() / directory / filename
+
+def parse_file(path):
+    with open(path, 'r') as fh:
+        k = fh.readline().strip()
+        kmers = fh.readline().strip().split()
+    fh.close()
+    return k, kmers
+
+k, kmers = parse_file(PATH)
 graph = DeBruijin(kmers, 4)
 
-print(graph.find_path())
-print(graph.construct_genome())
-
+print(graph.edges)
